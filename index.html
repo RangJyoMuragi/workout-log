@@ -458,6 +458,68 @@
     background: var(--accent);
     color: var(--accent-ink);
   }
+  .btn-danger {
+    background: var(--danger);
+    color: var(--accent-ink);
+  }
+  .btn-danger:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .day-card.selectable {
+    cursor: pointer;
+  }
+  .day-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent), var(--shadow);
+  }
+
+  .select-checkbox {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .selection-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 24px -12px rgba(33, 29, 23, 0.28);
+    z-index: 25;
+  }
+  .selection-bar.open {
+    display: flex;
+  }
+  .selection-bar-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .selection-count {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .selection-bar-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .selection-bar-actions .btn {
+    flex: 1;
+    padding: 10px 6px;
+    font-size: 13px;
+    min-height: 40px;
+  }
 
   @media (prefers-reduced-motion: no-preference) {
     .fab, .icon-btn, .btn { transition: transform 0.12s ease, background-color 0.12s ease; }
@@ -472,6 +534,7 @@
     </div>
     <div class="header-actions">
       <button class="sync-btn" id="importBtn" type="button" aria-label="가져오기">⬇</button>
+      <button class="sync-btn" id="selectModeBtn" type="button" aria-label="선택 삭제">🗑</button>
       <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
     </div>
   </header>
@@ -480,6 +543,29 @@
 </div>
 
 <button class="fab" id="fabAdd" aria-label="기록 추가">+</button>
+
+<div class="selection-bar" id="selectionBar">
+  <div class="selection-bar-top">
+    <button class="btn btn-ghost" id="selectCancelBtn" type="button">취소</button>
+    <span class="selection-count" id="selectionCount">0개 선택</span>
+  </div>
+  <div class="selection-bar-actions">
+    <button class="btn btn-ghost" id="selectAllBtn" type="button">전체 선택</button>
+    <button class="btn btn-danger" id="deleteAllBtn" type="button">전체 삭제</button>
+    <button class="btn btn-danger" id="deleteSelectedBtn" type="button" disabled>선택 삭제</button>
+  </div>
+</div>
+
+<div class="overlay" id="confirmOverlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 class="sheet-title" id="confirmTitle">삭제하시겠어요?</h2>
+    <p class="sync-hint" id="confirmMessage"></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="confirmCancelBtn" type="button">취소</button>
+      <button class="btn btn-danger" id="confirmOkBtn" type="button">삭제</button>
+    </div>
+  </div>
+</div>
 
 <div class="overlay" id="overlay">
   <div class="sheet" role="dialog" aria-modal="true">
@@ -683,6 +769,109 @@
   const joinCodeBtn = document.getElementById('joinCodeBtn');
   const syncCloseBtn = document.getElementById('syncCloseBtn');
   const syncStatus = document.getElementById('syncStatus');
+  const fabAdd = document.getElementById('fabAdd');
+  const selectModeBtn = document.getElementById('selectModeBtn');
+  const selectionBar = document.getElementById('selectionBar');
+  const selectionCount = document.getElementById('selectionCount');
+  const selectCancelBtn = document.getElementById('selectCancelBtn');
+  const selectAllBtn = document.getElementById('selectAllBtn');
+  const deleteAllBtn = document.getElementById('deleteAllBtn');
+  const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  const confirmTitle = document.getElementById('confirmTitle');
+  const confirmMessage = document.getElementById('confirmMessage');
+  const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+  const confirmOkBtn = document.getElementById('confirmOkBtn');
+
+  let selectionMode = false;
+  let selectedIds = new Set();
+  let pendingConfirmAction = null;
+
+  function openConfirm(title, message, onConfirm) {
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = message;
+    pendingConfirmAction = onConfirm;
+    confirmOverlay.classList.add('open');
+  }
+
+  function closeConfirm() {
+    confirmOverlay.classList.remove('open');
+    pendingConfirmAction = null;
+  }
+
+  confirmCancelBtn.addEventListener('click', closeConfirm);
+  confirmOverlay.addEventListener('click', (e) => {
+    if (e.target === confirmOverlay) closeConfirm();
+  });
+  confirmOkBtn.addEventListener('click', () => {
+    const action = pendingConfirmAction;
+    closeConfirm();
+    if (action) action();
+  });
+
+  function updateSelectionBar() {
+    selectionCount.textContent = `${selectedIds.size}개 선택`;
+    deleteSelectedBtn.disabled = selectedIds.size === 0;
+  }
+
+  function enterSelectionMode() {
+    selectionMode = true;
+    selectedIds = new Set();
+    selectionBar.classList.add('open');
+    fabAdd.style.display = 'none';
+    render();
+  }
+
+  function exitSelectionMode() {
+    selectionMode = false;
+    selectedIds = new Set();
+    selectionBar.classList.remove('open');
+    fabAdd.style.display = '';
+    render();
+  }
+
+  selectModeBtn.addEventListener('click', () => {
+    if (selectionMode) exitSelectionMode();
+    else enterSelectionMode();
+  });
+  selectCancelBtn.addEventListener('click', exitSelectionMode);
+
+  selectAllBtn.addEventListener('click', () => {
+    if (selectedIds.size === days.length) {
+      selectedIds = new Set();
+    } else {
+      selectedIds = new Set(days.map((d) => d.id));
+    }
+    render();
+  });
+
+  deleteSelectedBtn.addEventListener('click', () => {
+    if (selectedIds.size === 0) return;
+    openConfirm(
+      '선택한 기록 삭제',
+      `선택한 ${selectedIds.size}일 기록을 삭제할까요? 되돌릴 수 없습니다.`,
+      () => {
+        days = days.filter((d) => !selectedIds.has(d.id));
+        saveDays(days);
+        pushToCloud();
+        exitSelectionMode();
+      }
+    );
+  });
+
+  deleteAllBtn.addEventListener('click', () => {
+    if (days.length === 0) return;
+    openConfirm(
+      '전체 삭제',
+      `전체 ${days.length}일 기록을 모두 삭제할까요? 되돌릴 수 없습니다.`,
+      () => {
+        days = [];
+        saveDays(days);
+        pushToCloud();
+        exitSelectionMode();
+      }
+    );
+  });
 
   function setSyncStatus(text, isError) {
     syncStatus.textContent = text;
@@ -738,14 +927,34 @@
       return;
     }
 
-    listRoot.innerHTML = `<div class="day-list">${sorted.map(dayCardHtml).join('')}</div>`;
+    listRoot.innerHTML = `<div class="day-list">${sorted.map((d) => dayCardHtml(d)).join('')}</div>`;
 
-    listRoot.querySelectorAll('[data-edit]').forEach((btn) => {
-      btn.addEventListener('click', () => openEdit(btn.getAttribute('data-edit')));
-    });
-    listRoot.querySelectorAll('[data-delete]').forEach((btn) => {
-      btn.addEventListener('click', () => deleteDay(btn.getAttribute('data-delete')));
-    });
+    if (selectionMode) {
+      updateSelectionBar();
+      listRoot.querySelectorAll('[data-select]').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const id = cb.getAttribute('data-select');
+          if (cb.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+          render();
+        });
+      });
+      listRoot.querySelectorAll('.day-card.selectable').forEach((card) => {
+        card.addEventListener('click', (e) => {
+          if (e.target.matches('input[data-select]')) return;
+          const cb = card.querySelector('input[data-select]');
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change'));
+        });
+      });
+    } else {
+      listRoot.querySelectorAll('[data-edit]').forEach((btn) => {
+        btn.addEventListener('click', () => openEdit(btn.getAttribute('data-edit')));
+      });
+      listRoot.querySelectorAll('[data-delete]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteDay(btn.getAttribute('data-delete')));
+      });
+    }
   }
 
   function dayCardHtml(day) {
@@ -758,17 +967,21 @@
       </div>
     `).join('');
 
+    const actionsHtml = selectionMode
+      ? `<input type="checkbox" class="select-checkbox" data-select="${day.id}" ${selectedIds.has(day.id) ? 'checked' : ''}>`
+      : `<div class="day-actions">
+          <button class="icon-btn" data-edit="${day.id}">수정</button>
+          <button class="icon-btn danger" data-delete="${day.id}">삭제</button>
+        </div>`;
+
     return `
-      <div class="day-card">
+      <div class="day-card ${selectionMode ? 'selectable' : ''} ${selectedIds.has(day.id) ? 'selected' : ''}">
         <div class="day-header">
           <div class="day-date">
             <span class="day-date-num">${label}</span>
             <span class="day-weekday">${weekday}</span>
           </div>
-          <div class="day-actions">
-            <button class="icon-btn" data-edit="${day.id}">수정</button>
-            <button class="icon-btn danger" data-delete="${day.id}">삭제</button>
-          </div>
+          ${actionsHtml}
         </div>
         ${exercisesHtml}
       </div>
