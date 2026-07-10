@@ -1,0 +1,660 @@
+<title>운동 기록</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="운동 기록">
+<meta name="theme-color" content="#1A1712" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F1EEE7" media="(prefers-color-scheme: light)">
+<link rel="apple-touch-icon" id="apple-icon">
+
+<style>
+  :root {
+    --bg: #F1EEE7;
+    --surface: #FFFFFF;
+    --surface-2: #FAF7F1;
+    --text: #211D17;
+    --text-muted: #726A5C;
+    --accent: #B23F1B;
+    --accent-ink: #FFF8F1;
+    --border: #E6E0D3;
+    --danger: #B23F1B;
+    --shadow: 0 8px 24px -12px rgba(33, 29, 23, 0.28);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1A1712;
+      --surface: #231F19;
+      --surface-2: #2B2620;
+      --text: #F4EFE6;
+      --text-muted: #A79C8B;
+      --accent: #E2793D;
+      --accent-ink: #211405;
+      --border: #39332B;
+      --shadow: 0 8px 28px -12px rgba(0, 0, 0, 0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1A1712;
+    --surface: #231F19;
+    --surface-2: #2B2620;
+    --text: #F4EFE6;
+    --text-muted: #A79C8B;
+    --accent: #E2793D;
+    --accent-ink: #211405;
+    --border: #39332B;
+    --shadow: 0 8px 28px -12px rgba(0, 0, 0, 0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #F1EEE7;
+    --surface: #FFFFFF;
+    --surface-2: #FAF7F1;
+    --text: #211D17;
+    --text-muted: #726A5C;
+    --accent: #B23F1B;
+    --accent-ink: #FFF8F1;
+    --border: #E6E0D3;
+    --shadow: 0 8px 24px -12px rgba(33, 29, 23, 0.28);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 20px) 16px 120px;
+  }
+
+  .app-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  .app-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .app-count {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 80px 20px;
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 15px;
+  }
+
+  .day-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .day-list > * + * {
+    position: relative;
+    margin-top: 22px;
+  }
+
+  .day-list > * + *::before {
+    content: "";
+    position: absolute;
+    top: -11px;
+    left: 4px;
+    right: 4px;
+    border-top: 1.5px dashed var(--border);
+  }
+
+  .day-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .day-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 10px;
+  }
+
+  .day-date {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .day-date-num {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .day-weekday {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    background: var(--accent);
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .day-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    min-height: 36px;
+  }
+  .icon-btn:hover { background: var(--surface-2); }
+  .icon-btn.danger { color: var(--danger); }
+
+  .exercise {
+    padding: 9px 0;
+  }
+  .exercise + .exercise {
+    border-top: 1px solid var(--border);
+  }
+
+  .exercise-name {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 3px;
+    text-wrap: balance;
+  }
+
+  .exercise-idx {
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-right: 2px;
+  }
+
+  .exercise-line {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .exercise-line b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .fab {
+    position: fixed;
+    right: 20px;
+    bottom: calc(env(safe-area-inset-bottom) + 24px);
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 24px -6px rgba(178, 63, 27, 0.5);
+    cursor: pointer;
+  }
+  .fab:active { transform: scale(0.96); }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 17, 12, 0.45);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 30;
+  }
+  .overlay.open { display: flex; }
+
+  .sheet {
+    width: 100%;
+    max-width: 640px;
+    max-height: 88vh;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px calc(env(safe-area-inset-bottom) + 18px);
+    overflow-y: auto;
+    box-shadow: var(--shadow);
+  }
+
+  .sheet-title {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0 0 16px;
+  }
+
+  .field-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 6px;
+    display: block;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 11px 12px;
+    font-size: 15px;
+    margin-bottom: 10px;
+    font-family: inherit;
+  }
+  input[type="text"]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  input.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .exercise-block {
+    padding-top: 12px;
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .exercise-block:first-of-type {
+    padding-top: 0;
+    margin-top: 4px;
+    border-top: none;
+  }
+
+  .exercise-row-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .exercise-row-head input { flex: 1; }
+
+  .remove-btn {
+    appearance: none;
+    border: none;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  .add-exercise-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+    padding: 8px 2px;
+    margin: 4px 0 18px;
+    cursor: pointer;
+  }
+
+  .sheet-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn {
+    appearance: none;
+    border: none;
+    border-radius: 9px;
+    padding: 11px 18px;
+    font-size: 14.5px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .fab, .icon-btn, .btn { transition: transform 0.12s ease, background-color 0.12s ease; }
+  }
+</style>
+
+<div class="app">
+  <header class="app-header">
+    <h1 class="app-title">운동 기록</h1>
+    <span class="app-count" id="dayCount"></span>
+  </header>
+
+  <div id="listRoot"></div>
+</div>
+
+<button class="fab" id="fabAdd" aria-label="기록 추가">+</button>
+
+<div class="overlay" id="overlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 class="sheet-title" id="sheetTitle">기록 추가</h2>
+
+    <label class="field-label" for="dateInput">날짜</label>
+    <input type="text" id="dateInput" class="mono" placeholder="예: 2026-07-01 또는 26/7/1">
+
+    <div id="exerciseRows"></div>
+
+    <button class="add-exercise-btn" id="addExerciseBtn" type="button">+ 운동 추가</button>
+
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="cancelBtn" type="button">취소</button>
+      <button class="btn btn-primary" id="saveBtn" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'workout-days';
+  const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function uid() {
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function todayISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function formatDateShort(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    const yy = d.getFullYear() % 100;
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return { label: `${yy}/${m}/${day}`, weekday: WEEKDAYS_KO[d.getDay()] };
+  }
+
+  function parseDateInput(input) {
+    const trimmed = (input || '').trim();
+    let m = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    m = trimmed.match(/^(\d{2,4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m) {
+      const year = m[1].length <= 2 ? 2000 + parseInt(m[1], 10) : parseInt(m[1], 10);
+      return `${year}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    }
+    return todayISO();
+  }
+
+  function loadDays() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveDays(days) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(days));
+  }
+
+  let days = loadDays();
+  let editingDayId = null;
+
+  const listRoot = document.getElementById('listRoot');
+  const dayCountEl = document.getElementById('dayCount');
+  const overlay = document.getElementById('overlay');
+  const sheetTitle = document.getElementById('sheetTitle');
+  const dateInput = document.getElementById('dateInput');
+  const exerciseRows = document.getElementById('exerciseRows');
+
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function render() {
+    const sorted = [...days].sort((a, b) => (a.date < b.date ? 1 : -1));
+    dayCountEl.textContent = sorted.length ? `총 ${sorted.length}일` : '';
+
+    if (sorted.length === 0) {
+      listRoot.innerHTML = `
+        <div class="empty-state">
+          <div>아직 기록이 없어요.</div>
+          <div>+ 버튼을 눌러 첫 기록을 남겨보세요.</div>
+        </div>`;
+      return;
+    }
+
+    listRoot.innerHTML = `<div class="day-list">${sorted.map(dayCardHtml).join('')}</div>`;
+
+    listRoot.querySelectorAll('[data-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => openEdit(btn.getAttribute('data-edit')));
+    });
+    listRoot.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => deleteDay(btn.getAttribute('data-delete')));
+    });
+  }
+
+  function dayCardHtml(day) {
+    const { label, weekday } = formatDateShort(day.date);
+    const exercisesHtml = day.exercises.map((ex, i) => `
+      <div class="exercise">
+        <p class="exercise-name"><span class="exercise-idx">${i + 1}.</span>${escapeHtml(ex.name)}</p>
+        ${ex.warmup ? `<div class="exercise-line"><b>웜업</b> - ${escapeHtml(ex.warmup)}</div>` : ''}
+        ${ex.main ? `<div class="exercise-line"><b>본셋</b> - ${escapeHtml(ex.main)}</div>` : ''}
+      </div>
+    `).join('');
+
+    return `
+      <div class="day-card">
+        <div class="day-header">
+          <div class="day-date">
+            <span class="day-date-num">${label}</span>
+            <span class="day-weekday">${weekday}</span>
+          </div>
+          <div class="day-actions">
+            <button class="icon-btn" data-edit="${day.id}">수정</button>
+            <button class="icon-btn danger" data-delete="${day.id}">삭제</button>
+          </div>
+        </div>
+        ${exercisesHtml}
+      </div>
+    `;
+  }
+
+  function deleteDay(id) {
+    days = days.filter((d) => d.id !== id);
+    saveDays(days);
+    render();
+  }
+
+  function emptyExerciseRow() {
+    return { id: uid(), name: '', warmup: '', main: '' };
+  }
+
+  let formExercises = [];
+
+  function renderExerciseRows() {
+    exerciseRows.innerHTML = formExercises.map((ex, i) => `
+      <div class="exercise-block" data-row="${ex.id}">
+        <div class="exercise-row-head">
+          <span class="exercise-idx">${i + 1}.</span>
+          <input type="text" data-field="name" placeholder="운동 이름 (예: 벤치 프레스)" value="${escapeHtml(ex.name)}">
+          ${formExercises.length > 1 ? `<button type="button" class="remove-btn" data-remove="${ex.id}">×</button>` : ''}
+        </div>
+        <input type="text" class="mono" data-field="warmup" placeholder="웜업 - 예: 20x12 / 40x8" value="${escapeHtml(ex.warmup)}">
+        <input type="text" class="mono" data-field="main" placeholder="본셋 - 예: 50x3x10,10,10" value="${escapeHtml(ex.main)}">
+      </div>
+    `).join('');
+
+    exerciseRows.querySelectorAll('[data-row]').forEach((block) => {
+      const id = block.getAttribute('data-row');
+      block.querySelectorAll('input[data-field]').forEach((inp) => {
+        inp.addEventListener('input', () => {
+          const field = inp.getAttribute('data-field');
+          const row = formExercises.find((e) => e.id === id);
+          if (row) row[field] = inp.value;
+        });
+      });
+    });
+    exerciseRows.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-remove');
+        formExercises = formExercises.filter((e) => e.id !== id);
+        renderExerciseRows();
+      });
+    });
+  }
+
+  function openAdd() {
+    editingDayId = null;
+    sheetTitle.textContent = '기록 추가';
+    dateInput.value = todayISO();
+    formExercises = [emptyExerciseRow()];
+    renderExerciseRows();
+    overlay.classList.add('open');
+  }
+
+  function openEdit(id) {
+    const day = days.find((d) => d.id === id);
+    if (!day) return;
+    editingDayId = id;
+    sheetTitle.textContent = '기록 수정';
+    dateInput.value = day.date;
+    formExercises = day.exercises.length
+      ? day.exercises.map((e) => ({ ...e }))
+      : [emptyExerciseRow()];
+    renderExerciseRows();
+    overlay.classList.add('open');
+  }
+
+  function closeSheet() {
+    overlay.classList.remove('open');
+  }
+
+  function saveSheet() {
+    const valid = formExercises
+      .map((e) => ({ ...e, name: e.name.trim(), warmup: e.warmup.trim(), main: e.main.trim() }))
+      .filter((e) => e.name.length > 0);
+    if (valid.length === 0) return;
+
+    const date = parseDateInput(dateInput.value);
+    if (editingDayId) {
+      days = days.map((d) => (d.id === editingDayId ? { ...d, date, exercises: valid } : d));
+    } else {
+      days = [{ id: uid(), date, exercises: valid }, ...days];
+    }
+    saveDays(days);
+    closeSheet();
+    render();
+  }
+
+  document.getElementById('fabAdd').addEventListener('click', openAdd);
+  document.getElementById('cancelBtn').addEventListener('click', closeSheet);
+  document.getElementById('saveBtn').addEventListener('click', saveSheet);
+  document.getElementById('addExerciseBtn').addEventListener('click', () => {
+    formExercises.push(emptyExerciseRow());
+    renderExerciseRows();
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeSheet();
+  });
+
+  render();
+
+  // Generate a simple barbell glyph as the home-screen icon (apple-touch-icon needs a raster image).
+  (function drawAppIcon() {
+    const size = 180;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const styles = getComputedStyle(document.documentElement);
+    const bg = styles.getPropertyValue('--bg').trim() || '#1A1712';
+    const accent = styles.getPropertyValue('--accent').trim() || '#E2793D';
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.strokeStyle = accent;
+    ctx.lineCap = 'round';
+
+    const midY = size / 2;
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(40, midY);
+    ctx.lineTo(140, midY);
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    function plate(cx, w, h) {
+      ctx.beginPath();
+      ctx.roundRect(cx - w / 2, midY - h / 2, w, h, 6);
+      ctx.fill();
+    }
+    plate(34, 20, 84);
+    plate(146, 20, 84);
+    plate(50, 14, 60);
+    plate(130, 14, 60);
+
+    document.getElementById('apple-icon').setAttribute('href', canvas.toDataURL('image/png'));
+  })();
+</script>
