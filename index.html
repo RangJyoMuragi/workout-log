@@ -110,6 +110,12 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   .sync-btn {
     appearance: none;
     border: 1px solid var(--border);
@@ -126,6 +132,25 @@
     flex-shrink: 0;
   }
   .sync-btn:hover { background: var(--surface-2); }
+
+  .import-textarea {
+    width: 100%;
+    min-height: 220px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 12px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    margin-bottom: 10px;
+    resize: vertical;
+  }
+  .import-textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
 
   .sync-code-row {
     display: flex;
@@ -445,7 +470,10 @@
       <h1 class="app-title">운동 기록</h1>
       <span class="app-count" id="dayCount"></span>
     </div>
-    <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
+    <div class="header-actions">
+      <button class="sync-btn" id="importBtn" type="button" aria-label="가져오기">⬇</button>
+      <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
+    </div>
   </header>
 
   <div id="listRoot"></div>
@@ -467,6 +495,22 @@
     <div class="sheet-actions">
       <button class="btn btn-ghost" id="cancelBtn" type="button">취소</button>
       <button class="btn btn-primary" id="saveBtn" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="importOverlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 class="sheet-title">메모 가져오기</h2>
+    <p class="sync-hint">메모장에 적어둔 운동 기록을 형식 그대로(날짜, 1.운동이름, 웜업 -, 본셋 - ) 붙여넣으면 자동으로 날짜별 기록으로 변환됩니다. 같은 날짜가 이미 있으면 덮어씁니다.</p>
+    <textarea class="import-textarea" id="importTextarea" placeholder="25/10/14 화
+1.벤치 프레스
+웜업 - 20x12 / 40x8
+본셋 - 50x3x10,10,10"></textarea>
+    <p class="sync-status" id="importStatus"></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="importCloseBtn" type="button">취소</button>
+      <button class="btn btn-primary" id="importConfirmBtn" type="button">가져오기</button>
     </div>
   </div>
 </div>
@@ -540,6 +584,49 @@
     return todayISO();
   }
 
+  function parseNotepadImport(text) {
+    const lines = text.split(/\r?\n/);
+    const result = [];
+    let currentDay = null;
+    let currentExercise = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (/^[ㅡ\-_=]{5,}$/.test(line)) continue;
+
+      const dateMatch = line.match(/^(\d{2,4})\/(\d{1,2})\/(\d{1,2})(?:\s*[일월화수목금토])?$/);
+      if (dateMatch) {
+        if (currentDay && currentDay.exercises.length) result.push(currentDay);
+        currentDay = { id: uid(), date: parseDateInput(`${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}`), exercises: [] };
+        currentExercise = null;
+        continue;
+      }
+      if (!currentDay) continue;
+
+      const exMatch = line.match(/^\d+\.\s*(.+)$/);
+      if (exMatch) {
+        currentExercise = { id: uid(), name: exMatch[1].trim(), warmup: '', main: '' };
+        currentDay.exercises.push(currentExercise);
+        continue;
+      }
+      if (!currentExercise) continue;
+
+      const warmupMatch = line.match(/^웜업\s*-\s*(.*)$/);
+      if (warmupMatch) {
+        currentExercise.warmup = warmupMatch[1].trim();
+        continue;
+      }
+      const mainMatch = line.match(/^본셋\s*-\s*(.*)$/);
+      if (mainMatch) {
+        currentExercise.main = mainMatch[1].trim();
+        continue;
+      }
+    }
+    if (currentDay && currentDay.exercises.length) result.push(currentDay);
+    return result;
+  }
+
   function loadDays() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -582,6 +669,12 @@
   const sheetTitle = document.getElementById('sheetTitle');
   const dateInput = document.getElementById('dateInput');
   const exerciseRows = document.getElementById('exerciseRows');
+  const importBtn = document.getElementById('importBtn');
+  const importOverlay = document.getElementById('importOverlay');
+  const importTextarea = document.getElementById('importTextarea');
+  const importStatus = document.getElementById('importStatus');
+  const importCloseBtn = document.getElementById('importCloseBtn');
+  const importConfirmBtn = document.getElementById('importConfirmBtn');
   const syncBtn = document.getElementById('syncBtn');
   const syncOverlay = document.getElementById('syncOverlay');
   const syncCodeDisplay = document.getElementById('syncCodeDisplay');
@@ -781,6 +874,40 @@
   function closeSync() {
     syncOverlay.classList.remove('open');
   }
+
+  function openImport() {
+    importTextarea.value = '';
+    importStatus.textContent = '';
+    importOverlay.classList.add('open');
+  }
+
+  function closeImport() {
+    importOverlay.classList.remove('open');
+  }
+
+  importBtn.addEventListener('click', openImport);
+  importCloseBtn.addEventListener('click', closeImport);
+  importOverlay.addEventListener('click', (e) => {
+    if (e.target === importOverlay) closeImport();
+  });
+
+  importConfirmBtn.addEventListener('click', () => {
+    const parsed = parseNotepadImport(importTextarea.value);
+    if (parsed.length === 0) {
+      importStatus.className = 'sync-status err';
+      importStatus.textContent = '인식된 기록이 없어요. 형식을 확인해주세요.';
+      return;
+    }
+    const byDate = new Map(days.map((d) => [d.date, d]));
+    for (const d of parsed) byDate.set(d.date, d);
+    days = Array.from(byDate.values());
+    saveDays(days);
+    render();
+    pushToCloud();
+    importStatus.className = 'sync-status ok';
+    importStatus.textContent = `${parsed.length}일치 기록을 가져왔습니다.`;
+    setTimeout(closeImport, 900);
+  });
 
   syncBtn.addEventListener('click', openSync);
   syncCloseBtn.addEventListener('click', closeSync);
