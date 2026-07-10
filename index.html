@@ -6,6 +6,23 @@
 <meta name="theme-color" content="#1A1712" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#F1EEE7" media="(prefers-color-scheme: light)">
 <link rel="apple-touch-icon" id="apple-icon">
+<script>
+  // iOS home-screen web apps aggressively cache pages. Fetch a small version
+  // marker with no-store so this check always hits the network; if it doesn't
+  // match what we last saw, force a real reload to pick up the new deploy.
+  (function checkForUpdate() {
+    fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })
+      .then((r) => r.text())
+      .then((v) => {
+        v = v.trim();
+        if (!v) return;
+        const stored = localStorage.getItem('app-version');
+        localStorage.setItem('app-version', v);
+        if (stored && stored !== v) location.reload();
+      })
+      .catch(() => {});
+  })();
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 
