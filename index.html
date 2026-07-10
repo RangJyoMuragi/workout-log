@@ -116,10 +116,30 @@
     flex-shrink: 0;
   }
 
+  .search-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 14.5px;
+    margin-bottom: 12px;
+    font-family: inherit;
+  }
+  .search-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
   .year-tabs {
     display: none;
     gap: 8px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 4px;
     margin-bottom: 14px;
     scrollbar-width: none;
@@ -441,6 +461,49 @@
   }
   .exercise-row-head input { flex: 1; }
 
+  .name-wrap {
+    position: relative;
+    flex: 1;
+  }
+  .name-wrap input {
+    width: 100%;
+  }
+  .suggest-box {
+    display: none;
+    position: absolute;
+    top: calc(100% - 6px);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    box-shadow: var(--shadow);
+    z-index: 40;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .suggest-box.open {
+    display: block;
+  }
+  .suggest-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .suggest-item:hover {
+    background: var(--surface-2);
+  }
+  .suggest-item + .suggest-item {
+    border-top: 1px solid var(--border);
+  }
+
   .remove-btn {
     appearance: none;
     border: none;
@@ -571,6 +634,8 @@
       <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
     </div>
   </header>
+
+  <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
 
   <div class="year-tabs" id="yearTabs"></div>
 
@@ -813,7 +878,22 @@
   const listRoot = document.getElementById('listRoot');
   const dayCountEl = document.getElementById('dayCount');
   const yearTabsEl = document.getElementById('yearTabs');
+  const searchInput = document.getElementById('searchInput');
   let activeYearFilter = 'all';
+  let searchQuery = '';
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim();
+    render();
+  });
+
+  // Mouse wheel scrolls the year tabs horizontally on desktop (touch swipe already works).
+  yearTabsEl.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      yearTabsEl.scrollLeft += e.deltaY;
+    }
+  }, { passive: false });
   const overlay = document.getElementById('overlay');
   const sheetTitle = document.getElementById('sheetTitle');
   const dateInput = document.getElementById('dateInput');
@@ -987,7 +1067,9 @@
   }
 
   function getVisibleDays() {
-    return activeYearFilter === 'all' ? days : days.filter((d) => d.date.slice(0, 4) === activeYearFilter);
+    let visible = activeYearFilter === 'all' ? days : days.filter((d) => d.date.slice(0, 4) === activeYearFilter);
+    if (searchQuery) visible = visible.filter((d) => matchesSearch(d, searchQuery));
+    return visible;
   }
 
   function renderYearTabs() {
@@ -1013,14 +1095,26 @@
     });
   }
 
+  function matchesSearch(day, query) {
+    const compactQuery = query.replace(/\s+/g, '');
+    if (!compactQuery) return true;
+    const { label } = formatDateShort(day.date); // e.g. "25/10/14"
+    if (day.date.includes(compactQuery) || label.includes(compactQuery)) return true;
+    return day.exercises.some((ex) => ex.name.replace(/\s+/g, '').includes(compactQuery));
+  }
+
   function render() {
     renderYearTabs();
-    const filteredDays = activeYearFilter === 'all' ? days : days.filter((d) => d.date.slice(0, 4) === activeYearFilter);
-    const sorted = [...filteredDays].sort((a, b) => (a.date < b.date ? 1 : -1));
+    const sorted = [...getVisibleDays()].sort((a, b) => (a.date < b.date ? 1 : -1));
     dayCountEl.textContent = sorted.length ? `총 ${sorted.length}일` : '';
 
     if (sorted.length === 0) {
-      listRoot.innerHTML = `
+      listRoot.innerHTML = searchQuery
+        ? `
+        <div class="empty-state">
+          <div>검색 결과가 없어요.</div>
+        </div>`
+        : `
         <div class="empty-state">
           <div>아직 기록이 없어요.</div>
           <div>+ 버튼을 눌러 첫 기록을 남겨보세요.</div>
@@ -1102,12 +1196,64 @@
 
   let formExercises = [];
 
+  // Unique exercise names from saved history, most-used first — feeds the autocomplete.
+  function getAllExerciseNames() {
+    const counts = new Map();
+    for (const d of days) {
+      for (const ex of d.exercises) {
+        const n = ex.name.trim();
+        if (!n) continue;
+        counts.set(n, (counts.get(n) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map((e) => e[0]);
+  }
+
+  function attachNameAutocomplete(block, rowId) {
+    const nameInput = block.querySelector('input[data-field="name"]');
+    const suggestBox = block.querySelector('.suggest-box');
+
+    function hideSuggestions() {
+      suggestBox.classList.remove('open');
+      suggestBox.innerHTML = '';
+    }
+
+    function refreshSuggestions() {
+      const value = nameInput.value.trim();
+      if (!value) { hideSuggestions(); return; }
+      const compact = value.replace(/\s+/g, '');
+      const matches = getAllExerciseNames()
+        .filter((n) => n !== value && n.replace(/\s+/g, '').includes(compact))
+        .slice(0, 6);
+      if (matches.length === 0) { hideSuggestions(); return; }
+      suggestBox.innerHTML = matches.map((n) => `<button type="button" class="suggest-item">${escapeHtml(n)}</button>`).join('');
+      suggestBox.classList.add('open');
+      suggestBox.querySelectorAll('.suggest-item').forEach((btn) => {
+        // pointerdown fires before the input loses focus, so the pick lands before blur hides the box.
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          nameInput.value = btn.textContent;
+          const row = formExercises.find((r) => r.id === rowId);
+          if (row) row.name = btn.textContent;
+          hideSuggestions();
+        });
+      });
+    }
+
+    nameInput.addEventListener('input', refreshSuggestions);
+    nameInput.addEventListener('focus', refreshSuggestions);
+    nameInput.addEventListener('blur', () => setTimeout(hideSuggestions, 150));
+  }
+
   function renderExerciseRows() {
     exerciseRows.innerHTML = formExercises.map((ex, i) => `
       <div class="exercise-block" data-row="${ex.id}">
         <div class="exercise-row-head">
           <span class="exercise-idx">${i + 1}.</span>
-          <input type="text" data-field="name" placeholder="운동 이름 (예: 벤치 프레스)" value="${escapeHtml(ex.name)}">
+          <div class="name-wrap">
+            <input type="text" data-field="name" placeholder="운동 이름 (예: 벤치 프레스)" value="${escapeHtml(ex.name)}" autocomplete="off">
+            <div class="suggest-box"></div>
+          </div>
           ${formExercises.length > 1 ? `<button type="button" class="remove-btn" data-remove="${ex.id}">×</button>` : ''}
         </div>
         <input type="text" class="mono" data-field="warmup" placeholder="웜업 - 예: 20x12 / 40x8" value="${escapeHtml(ex.warmup)}">
@@ -1124,6 +1270,7 @@
           if (row) row[field] = inp.value;
         });
       });
+      attachNameAutocomplete(block, id);
     });
     exerciseRows.querySelectorAll('[data-remove]').forEach((btn) => {
       btn.addEventListener('click', () => {
