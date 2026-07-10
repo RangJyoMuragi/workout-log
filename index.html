@@ -498,6 +498,8 @@
     z-index: 40;
     max-height: 200px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   .suggest-box.open {
     display: block;
@@ -947,15 +949,49 @@
   let selectedIds = new Set();
   let pendingConfirmAction = null;
 
+  // iOS lets touches scroll the page behind a fixed-position sheet unless the
+  // body itself is pinned. Lock/unlock based on whether any modal overlay is open.
+  let bodyScrollLocked = false;
+  let savedScrollY = 0;
+
+  function syncBodyScrollLock() {
+    const anyOpen = !!document.querySelector('.overlay.open');
+    if (anyOpen && !bodyScrollLocked) {
+      bodyScrollLocked = true;
+      savedScrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${savedScrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+    } else if (!anyOpen && bodyScrollLocked) {
+      bodyScrollLocked = false;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      window.scrollTo(0, savedScrollY);
+    }
+  }
+
+  function openOverlay(el) {
+    el.classList.add('open');
+    syncBodyScrollLock();
+  }
+
+  function closeOverlay(el) {
+    el.classList.remove('open');
+    syncBodyScrollLock();
+  }
+
   function openConfirm(title, message, onConfirm) {
     confirmTitle.textContent = title;
     confirmMessage.textContent = message;
     pendingConfirmAction = onConfirm;
-    confirmOverlay.classList.add('open');
+    openOverlay(confirmOverlay);
   }
 
   function closeConfirm() {
-    confirmOverlay.classList.remove('open');
+    closeOverlay(confirmOverlay);
     pendingConfirmAction = null;
   }
 
@@ -1246,9 +1282,9 @@
       suggestBox.innerHTML = matches.map((n) => `<button type="button" class="suggest-item">${escapeHtml(n)}</button>`).join('');
       suggestBox.classList.add('open');
       suggestBox.querySelectorAll('.suggest-item').forEach((btn) => {
-        // pointerdown fires before the input loses focus, so the pick lands before blur hides the box.
-        btn.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
+        // Plain click (fires on release, not on initial touch) — the blur delay
+        // below keeps the box mounted long enough for the click to land.
+        btn.addEventListener('click', () => {
           nameInput.value = btn.textContent;
           const row = formExercises.find((r) => r.id === rowId);
           if (row) row.name = btn.textContent;
@@ -1259,7 +1295,7 @@
 
     nameInput.addEventListener('input', refreshSuggestions);
     nameInput.addEventListener('focus', refreshSuggestions);
-    nameInput.addEventListener('blur', () => setTimeout(hideSuggestions, 150));
+    nameInput.addEventListener('blur', () => setTimeout(hideSuggestions, 250));
   }
 
   function renderExerciseRows() {
@@ -1304,7 +1340,7 @@
     dateInput.value = todayISO();
     formExercises = [emptyExerciseRow()];
     renderExerciseRows();
-    overlay.classList.add('open');
+    openOverlay(overlay);
   }
 
   function openEdit(id) {
@@ -1317,11 +1353,11 @@
       ? day.exercises.map((e) => ({ ...e }))
       : [emptyExerciseRow()];
     renderExerciseRows();
-    overlay.classList.add('open');
+    openOverlay(overlay);
   }
 
   function closeSheet() {
-    overlay.classList.remove('open');
+    closeOverlay(overlay);
   }
 
   function saveSheet() {
@@ -1346,21 +1382,21 @@
     syncCodeDisplay.textContent = syncCode;
     joinCodeInput.value = '';
     setSyncStatus('', false);
-    syncOverlay.classList.add('open');
+    openOverlay(syncOverlay);
   }
 
   function closeSync() {
-    syncOverlay.classList.remove('open');
+    closeOverlay(syncOverlay);
   }
 
   function openImport() {
     importTextarea.value = '';
     importStatus.textContent = '';
-    importOverlay.classList.add('open');
+    openOverlay(importOverlay);
   }
 
   function closeImport() {
-    importOverlay.classList.remove('open');
+    closeOverlay(importOverlay);
   }
 
   importBtn.addEventListener('click', openImport);
