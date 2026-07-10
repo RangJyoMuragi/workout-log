@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#1A1712" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#F1EEE7" media="(prefers-color-scheme: light)">
 <link rel="apple-touch-icon" id="apple-icon">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 
 <style>
   :root {
@@ -81,9 +83,17 @@
 
   .app-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
+    gap: 12px;
     margin-bottom: 18px;
+  }
+
+  .app-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
   }
 
   .app-title {
@@ -99,6 +109,57 @@
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
+
+  .sync-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sync-btn:hover { background: var(--surface-2); }
+
+  .sync-code-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .sync-code {
+    flex: 1;
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+  }
+
+  .sync-hint {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 0 0 20px;
+    line-height: 1.5;
+  }
+
+  .sync-status {
+    font-size: 12px;
+    margin: -4px 0 16px;
+  }
+  .sync-status.ok { color: var(--text-muted); }
+  .sync-status.err { color: var(--danger); }
 
   .empty-state {
     display: flex;
@@ -380,8 +441,11 @@
 
 <div class="app">
   <header class="app-header">
-    <h1 class="app-title">운동 기록</h1>
-    <span class="app-count" id="dayCount"></span>
+    <div class="app-header-text">
+      <h1 class="app-title">운동 기록</h1>
+      <span class="app-count" id="dayCount"></span>
+    </div>
+    <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
   </header>
 
   <div id="listRoot"></div>
@@ -407,8 +471,44 @@
   </div>
 </div>
 
+<div class="overlay" id="syncOverlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 class="sheet-title">동기화</h2>
+
+    <label class="field-label">내 동기화 코드</label>
+    <div class="sync-code-row">
+      <span class="sync-code" id="syncCodeDisplay"></span>
+      <button class="btn btn-ghost" id="copyCodeBtn" type="button">복사</button>
+    </div>
+    <p class="sync-hint">다른 기기(PC, 폰)에서 이 코드를 입력하면 같은 기록을 실시간으로 공유합니다.</p>
+    <p class="sync-status" id="syncStatus"></p>
+
+    <label class="field-label">다른 기기의 코드로 연결</label>
+    <input type="text" id="joinCodeInput" class="mono" placeholder="다른 기기에 표시된 코드 입력">
+
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="syncCloseBtn" type="button">닫기</button>
+      <button class="btn btn-primary" id="joinCodeBtn" type="button">연결하기</button>
+    </div>
+  </div>
+</div>
+
 <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyD1ihTSkJ8af3OZpg8b3KHK1gQ61iUqolA",
+    authDomain: "fitness-tracking-44f4f.firebaseapp.com",
+    projectId: "fitness-tracking-44f4f",
+    storageBucket: "fitness-tracking-44f4f.firebasestorage.app",
+    messagingSenderId: "485485802188",
+    appId: "1:485485802188:web:fba4d0e7a2fb2708798869"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  db.settings({ experimentalAutoDetectLongPolling: true });
+
   const STORAGE_KEY = 'workout-days';
+  const SYNC_KEY = 'workout-sync-code';
+  const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
   function uid() {
@@ -453,8 +553,28 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(days));
   }
 
+  function randomSyncCode(len = 10) {
+    const arr = new Uint32Array(len);
+    crypto.getRandomValues(arr);
+    let s = '';
+    for (let i = 0; i < len; i++) s += CODE_CHARS[arr[i] % CODE_CHARS.length];
+    return s;
+  }
+
+  function getSyncCode() {
+    let code = localStorage.getItem(SYNC_KEY);
+    if (!code) {
+      code = randomSyncCode();
+      localStorage.setItem(SYNC_KEY, code);
+    }
+    return code;
+  }
+
   let days = loadDays();
   let editingDayId = null;
+  let syncCode = getSyncCode();
+  let unsubscribeSync = null;
+  let applyingRemote = false;
 
   const listRoot = document.getElementById('listRoot');
   const dayCountEl = document.getElementById('dayCount');
@@ -462,6 +582,49 @@
   const sheetTitle = document.getElementById('sheetTitle');
   const dateInput = document.getElementById('dateInput');
   const exerciseRows = document.getElementById('exerciseRows');
+  const syncBtn = document.getElementById('syncBtn');
+  const syncOverlay = document.getElementById('syncOverlay');
+  const syncCodeDisplay = document.getElementById('syncCodeDisplay');
+  const copyCodeBtn = document.getElementById('copyCodeBtn');
+  const joinCodeInput = document.getElementById('joinCodeInput');
+  const joinCodeBtn = document.getElementById('joinCodeBtn');
+  const syncCloseBtn = document.getElementById('syncCloseBtn');
+  const syncStatus = document.getElementById('syncStatus');
+
+  function setSyncStatus(text, isError) {
+    syncStatus.textContent = text;
+    syncStatus.className = 'sync-status ' + (isError ? 'err' : 'ok');
+  }
+
+  function subscribeSync() {
+    if (unsubscribeSync) unsubscribeSync();
+    setSyncStatus('동기화 연결 중...', false);
+    unsubscribeSync = db.collection('logs').doc(syncCode).onSnapshot((snap) => {
+      setSyncStatus('동기화 됨', false);
+      if (!snap.exists) return;
+      const data = snap.data();
+      if (Array.isArray(data.days)) {
+        applyingRemote = true;
+        days = data.days;
+        saveDays(days);
+        render();
+        applyingRemote = false;
+      }
+    }, (err) => {
+      console.error('sync error', err);
+      setSyncStatus('동기화 실패 (오프라인이거나 권한 설정 필요)', true);
+    });
+  }
+
+  function pushToCloud() {
+    if (applyingRemote) return;
+    db.collection('logs').doc(syncCode)
+      .set({ days, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+      .catch((e) => {
+        console.error('push failed', e);
+        setSyncStatus('동기화 실패 (오프라인이거나 권한 설정 필요)', true);
+      });
+  }
 
   function escapeHtml(s) {
     return (s || '').replace(/[&<>"']/g, (c) => ({
@@ -523,6 +686,7 @@
     days = days.filter((d) => d.id !== id);
     saveDays(days);
     render();
+    pushToCloud();
   }
 
   function emptyExerciseRow() {
@@ -604,7 +768,44 @@
     saveDays(days);
     closeSheet();
     render();
+    pushToCloud();
   }
+
+  function openSync() {
+    syncCodeDisplay.textContent = syncCode;
+    joinCodeInput.value = '';
+    setSyncStatus('', false);
+    syncOverlay.classList.add('open');
+  }
+
+  function closeSync() {
+    syncOverlay.classList.remove('open');
+  }
+
+  syncBtn.addEventListener('click', openSync);
+  syncCloseBtn.addEventListener('click', closeSync);
+  syncOverlay.addEventListener('click', (e) => {
+    if (e.target === syncOverlay) closeSync();
+  });
+
+  copyCodeBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(syncCode);
+      copyCodeBtn.textContent = '복사됨';
+      setTimeout(() => { copyCodeBtn.textContent = '복사'; }, 1500);
+    } catch (e) {
+      /* clipboard unavailable; user can select the text manually */
+    }
+  });
+
+  joinCodeBtn.addEventListener('click', () => {
+    const raw = joinCodeInput.value.trim().toUpperCase();
+    if (raw.length < 6) return;
+    syncCode = raw;
+    localStorage.setItem(SYNC_KEY, syncCode);
+    syncCodeDisplay.textContent = syncCode;
+    subscribeSync();
+  });
 
   document.getElementById('fabAdd').addEventListener('click', openAdd);
   document.getElementById('cancelBtn').addEventListener('click', closeSheet);
@@ -618,6 +819,7 @@
   });
 
   render();
+  subscribeSync();
 
   // Generate a simple barbell glyph as the home-screen icon (apple-touch-icon needs a raster image).
   (function drawAppIcon() {
