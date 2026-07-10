@@ -116,6 +116,39 @@
     flex-shrink: 0;
   }
 
+  .year-tabs {
+    display: none;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 14px;
+    scrollbar-width: none;
+  }
+  .year-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .year-tabs.open {
+    display: flex;
+  }
+  .year-tab {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .year-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
   .sync-btn {
     appearance: none;
     border: 1px solid var(--border);
@@ -539,6 +572,8 @@
     </div>
   </header>
 
+  <div class="year-tabs" id="yearTabs"></div>
+
   <div id="listRoot"></div>
 </div>
 
@@ -675,19 +710,45 @@
     const result = [];
     let currentDay = null;
     let currentExercise = null;
+    let currentYear = null;
+
+    // A date token must be followed by end-of-line, whitespace, or Korean text (weekday/note) —
+    // never another digit or "/", so wrapped rep-scheme lines like "12/12/12,12/12/..." aren't
+    // mistaken for a date.
+    const dateBoundary = '(?=$|\\s|[가-힣])';
+    const yearRe = /^(\d{4})년$/;
+    const fullDateRe = new RegExp(`^(\\d{2,4})\\/(\\d{1,2})\\/(\\d{1,2})(?:\\s*[일월화수목금토])?${dateBoundary}`);
+    const shortDateRe = new RegExp(`^(\\d{1,2})\\/(\\d{1,2})(?:\\s*[일월화수목금토])?${dateBoundary}`);
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line) continue;
       if (/^[ㅡ\-_=]{5,}$/.test(line)) continue;
 
-      const dateMatch = line.match(/^(\d{2,4})\/(\d{1,2})\/(\d{1,2})(?:\s*[일월화수목금토])?$/);
-      if (dateMatch) {
+      const yearMatch = line.match(yearRe);
+      if (yearMatch) {
+        currentYear = parseInt(yearMatch[1], 10);
+        continue;
+      }
+
+      const fullDateMatch = line.match(fullDateRe);
+      if (fullDateMatch) {
         if (currentDay && currentDay.exercises.length) result.push(currentDay);
-        currentDay = { id: uid(), date: parseDateInput(`${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}`), exercises: [] };
+        currentDay = { id: uid(), date: parseDateInput(`${fullDateMatch[1]}/${fullDateMatch[2]}/${fullDateMatch[3]}`), exercises: [] };
         currentExercise = null;
         continue;
       }
+
+      const shortDateMatch = line.match(shortDateRe);
+      if (shortDateMatch && currentYear) {
+        if (currentDay && currentDay.exercises.length) result.push(currentDay);
+        const mm = shortDateMatch[1].padStart(2, '0');
+        const dd = shortDateMatch[2].padStart(2, '0');
+        currentDay = { id: uid(), date: `${currentYear}-${mm}-${dd}`, exercises: [] };
+        currentExercise = null;
+        continue;
+      }
+
       if (!currentDay) continue;
 
       const exMatch = line.match(/^\d+\.\s*(.+)$/);
@@ -751,6 +812,8 @@
 
   const listRoot = document.getElementById('listRoot');
   const dayCountEl = document.getElementById('dayCount');
+  const yearTabsEl = document.getElementById('yearTabs');
+  let activeYearFilter = 'all';
   const overlay = document.getElementById('overlay');
   const sheetTitle = document.getElementById('sheetTitle');
   const dateInput = document.getElementById('dateInput');
@@ -837,10 +900,11 @@
   selectCancelBtn.addEventListener('click', exitSelectionMode);
 
   selectAllBtn.addEventListener('click', () => {
-    if (selectedIds.size === days.length) {
+    const visible = getVisibleDays();
+    if (selectedIds.size === visible.length) {
       selectedIds = new Set();
     } else {
-      selectedIds = new Set(days.map((d) => d.id));
+      selectedIds = new Set(visible.map((d) => d.id));
     }
     render();
   });
@@ -860,12 +924,15 @@
   });
 
   deleteAllBtn.addEventListener('click', () => {
-    if (days.length === 0) return;
+    const visible = getVisibleDays();
+    if (visible.length === 0) return;
+    const scopeLabel = activeYearFilter === 'all' ? '전체' : `${activeYearFilter}년`;
     openConfirm(
       '전체 삭제',
-      `전체 ${days.length}일 기록을 모두 삭제할까요? 되돌릴 수 없습니다.`,
+      `${scopeLabel} ${visible.length}일 기록을 모두 삭제할까요? 되돌릴 수 없습니다.`,
       () => {
-        days = [];
+        const visibleIds = new Set(visible.map((d) => d.id));
+        days = days.filter((d) => !visibleIds.has(d.id));
         saveDays(days);
         pushToCloud();
         exitSelectionMode();
@@ -914,8 +981,42 @@
     }[c]));
   }
 
+  function getAvailableYears() {
+    const years = new Set(days.map((d) => d.date.slice(0, 4)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }
+
+  function getVisibleDays() {
+    return activeYearFilter === 'all' ? days : days.filter((d) => d.date.slice(0, 4) === activeYearFilter);
+  }
+
+  function renderYearTabs() {
+    const years = getAvailableYears();
+    if (years.length <= 1) {
+      yearTabsEl.classList.remove('open');
+      yearTabsEl.innerHTML = '';
+      if (activeYearFilter !== 'all') activeYearFilter = 'all';
+      return;
+    }
+    if (activeYearFilter !== 'all' && !years.includes(activeYearFilter)) activeYearFilter = 'all';
+
+    yearTabsEl.classList.add('open');
+    const tabs = ['all', ...years];
+    yearTabsEl.innerHTML = tabs.map((y) => `
+      <button class="year-tab ${activeYearFilter === y ? 'active' : ''}" data-year="${y}" type="button">${y === 'all' ? '전체' : y + '년'}</button>
+    `).join('');
+    yearTabsEl.querySelectorAll('[data-year]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeYearFilter = btn.getAttribute('data-year');
+        render();
+      });
+    });
+  }
+
   function render() {
-    const sorted = [...days].sort((a, b) => (a.date < b.date ? 1 : -1));
+    renderYearTabs();
+    const filteredDays = activeYearFilter === 'all' ? days : days.filter((d) => d.date.slice(0, 4) === activeYearFilter);
+    const sorted = [...filteredDays].sort((a, b) => (a.date < b.date ? 1 : -1));
     dayCountEl.textContent = sorted.length ? `총 ${sorted.length}일` : '';
 
     if (sorted.length === 0) {
