@@ -597,10 +597,10 @@
 
   .timer-display {
     text-align: center;
-    font-size: 48px;
+    font-size: 40px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     margin: 4px 0 18px;
     color: var(--text);
   }
@@ -1248,24 +1248,28 @@
   const timerCloseBtn = document.getElementById('timerCloseBtn');
   const timerPill = document.getElementById('timerPill');
 
-  let timerTotalSeconds = 60;
-  let timerRemaining = 60;
+  let timerTotalMs = 60000;
+  let timerRemainingMs = 60000;
   let timerInterval = null;
   let timerRunning = false;
+  let timerLastTick = 0;
 
-  function formatTimer(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  function formatTimer(ms) {
+    if (ms < 0) ms = 0;
+    const totalCentis = Math.round(ms / 10);
+    const minutes = Math.floor(totalCentis / 6000);
+    const seconds = Math.floor((totalCentis % 6000) / 100);
+    const centis = totalCentis % 100;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centis).padStart(2, '0')}`;
   }
 
   function updateTimerUI() {
-    timerDisplay.textContent = formatTimer(timerRemaining);
-    timerPill.textContent = `⏱ ${formatTimer(timerRemaining)}`;
+    timerDisplay.textContent = formatTimer(timerRemainingMs);
+    timerPill.textContent = `⏱ ${formatTimer(timerRemainingMs)}`;
     timerPresets.querySelectorAll('.preset-btn').forEach((btn) => {
-      btn.classList.toggle('active', parseInt(btn.getAttribute('data-secs'), 10) === timerTotalSeconds);
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-secs'), 10) * 1000 === timerTotalMs);
     });
-    const showPill = !timerOverlay.classList.contains('open') && (timerRunning || timerRemaining !== timerTotalSeconds);
+    const showPill = !timerOverlay.classList.contains('open') && (timerRunning || timerRemainingMs !== timerTotalMs);
     timerPill.classList.toggle('visible', showPill);
   }
 
@@ -1276,48 +1280,38 @@
     }
   }
 
-  function playTimerBeep() {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = 880;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-      osc.onended = () => ctx.close();
-    } catch (e) {
-      /* Web Audio unavailable — silently skip the beep. */
-    }
-  }
-
   function timerFinished() {
     stopTimerInterval();
     timerRunning = false;
     timerStartPauseBtn.textContent = '시작';
     if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
-    playTimerBeep();
     timerDisplay.classList.add('done');
     setTimeout(() => timerDisplay.classList.remove('done'), 1500);
-    timerRemaining = timerTotalSeconds;
+    timerRemainingMs = timerTotalMs;
     updateTimerUI();
   }
 
   function tickTimer() {
-    timerRemaining--;
-    updateTimerUI();
-    if (timerRemaining <= 0) timerFinished();
+    const now = performance.now();
+    const delta = now - timerLastTick;
+    timerLastTick = now;
+    timerRemainingMs -= delta;
+    if (timerRemainingMs <= 0) {
+      timerRemainingMs = 0;
+      updateTimerUI();
+      timerFinished();
+    } else {
+      updateTimerUI();
+    }
   }
 
   function startTimer() {
-    if (timerRemaining <= 0) timerRemaining = timerTotalSeconds;
+    if (timerRemainingMs <= 0) timerRemainingMs = timerTotalMs;
     timerRunning = true;
     timerStartPauseBtn.textContent = '일시정지';
     stopTimerInterval();
-    timerInterval = setInterval(tickTimer, 1000);
+    timerLastTick = performance.now();
+    timerInterval = setInterval(tickTimer, 20);
     updateTimerUI();
   }
 
@@ -1332,8 +1326,8 @@
     stopTimerInterval();
     timerRunning = false;
     timerStartPauseBtn.textContent = '시작';
-    timerTotalSeconds = secs;
-    timerRemaining = secs;
+    timerTotalMs = secs * 1000;
+    timerRemainingMs = timerTotalMs;
     updateTimerUI();
   }
 
@@ -1358,7 +1352,7 @@
     stopTimerInterval();
     timerRunning = false;
     timerStartPauseBtn.textContent = '시작';
-    timerRemaining = timerTotalSeconds;
+    timerRemainingMs = timerTotalMs;
     updateTimerUI();
   });
 
