@@ -139,14 +139,19 @@
     margin-bottom: 12px;
   }
 
-  .search-input {
+  .search-wrap {
+    position: relative;
     flex: 1;
     min-width: 0;
+  }
+
+  .search-input {
+    width: 100%;
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 9px;
-    padding: 10px 12px;
+    padding: 10px 34px 10px 12px;
     font-size: 14.5px;
     font-family: inherit;
   }
@@ -156,6 +161,29 @@
   }
   .search-input::placeholder {
     color: var(--text-muted);
+  }
+
+  .search-clear-btn {
+    display: none;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .search-clear-btn:hover {
+    background: var(--surface-2);
+  }
+  .search-clear-btn.visible {
+    display: block;
   }
 
   .sort-btn {
@@ -678,7 +706,10 @@
   </header>
 
   <div class="toolbar-row">
-    <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
+    <div class="search-wrap">
+      <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
+      <button class="search-clear-btn" id="searchClearBtn" type="button" aria-label="검색어 지우기">×</button>
+    </div>
     <button class="sort-btn" id="sortToggleBtn" type="button">최신순</button>
   </div>
 
@@ -924,13 +955,27 @@
   const dayCountEl = document.getElementById('dayCount');
   const yearTabsEl = document.getElementById('yearTabs');
   const searchInput = document.getElementById('searchInput');
+  const searchClearBtn = document.getElementById('searchClearBtn');
   const sortToggleBtn = document.getElementById('sortToggleBtn');
   let activeYearFilter = 'all';
   let searchQuery = '';
   let sortAscending = false;
 
+  function updateSearchClearBtn() {
+    searchClearBtn.classList.toggle('visible', searchInput.value.length > 0);
+  }
+
   searchInput.addEventListener('input', () => {
     searchQuery = searchInput.value.trim();
+    updateSearchClearBtn();
+    render();
+  });
+
+  searchClearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    searchQuery = '';
+    updateSearchClearBtn();
+    searchInput.focus();
     render();
   });
 
