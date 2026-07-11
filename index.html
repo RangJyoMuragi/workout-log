@@ -251,9 +251,39 @@
     margin-bottom: 14px;
   }
   .calendar-label {
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--text);
     font-size: 16px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
+    font-family: inherit;
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .calendar-label:hover {
+    background: var(--surface-2);
+  }
+
+  .calendar-picker {
+    display: none;
+    justify-content: center;
+    gap: 8px;
+    margin: -6px 0 14px;
+  }
+  .calendar-picker.open {
+    display: flex;
+  }
+  .cal-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font-size: 13.5px;
+    font-family: inherit;
   }
   .cal-nav-btn {
     appearance: none;
@@ -810,8 +840,13 @@
   <div class="calendar-view" id="calendarView">
     <div class="calendar-nav">
       <button class="cal-nav-btn" id="calPrevBtn" type="button" aria-label="이전 달">‹</button>
-      <span class="calendar-label" id="calendarLabel"></span>
+      <button type="button" class="calendar-label" id="calendarLabel"></button>
       <button class="cal-nav-btn" id="calNextBtn" type="button" aria-label="다음 달">›</button>
+    </div>
+    <div class="calendar-picker" id="calendarPicker">
+      <select class="cal-select" id="calYearSelect"></select>
+      <select class="cal-select" id="calMonthSelect"></select>
+      <select class="cal-select" id="calDaySelect"></select>
     </div>
     <div class="calendar-grid" id="calendarGrid"></div>
   </div>
@@ -1129,10 +1164,18 @@
   const calendarGrid = document.getElementById('calendarGrid');
   const calPrevBtn = document.getElementById('calPrevBtn');
   const calNextBtn = document.getElementById('calNextBtn');
+  const calendarPicker = document.getElementById('calendarPicker');
+  const calYearSelect = document.getElementById('calYearSelect');
+  const calMonthSelect = document.getElementById('calMonthSelect');
+  const calDaySelect = document.getElementById('calDaySelect');
 
   let viewMode = 'list';
   let calendarYear = null;
   let calendarMonth = null;
+
+  function getDaysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+  }
 
   function refreshCurrentView() {
     if (viewMode === 'calendar') renderCalendar();
@@ -1162,12 +1205,87 @@
     calendarView.classList.toggle('open', isCalendar);
     calendarToggleBtn.textContent = isCalendar ? '📋' : '📅';
     calendarToggleBtn.setAttribute('aria-label', isCalendar ? '목록 보기' : '달력 보기');
-    if (isCalendar) renderCalendar();
-    else render();
+    closeCalendarPicker();
+    if (isCalendar) {
+      // Always land on the real current month when (re-)entering the calendar.
+      const now = new Date();
+      calendarYear = now.getFullYear();
+      calendarMonth = now.getMonth() + 1;
+      renderCalendar();
+    } else {
+      render();
+    }
   }
 
   calendarToggleBtn.addEventListener('click', () => {
     setViewMode(viewMode === 'calendar' ? 'list' : 'calendar');
+  });
+
+  function closeCalendarPicker() {
+    calendarPicker.classList.remove('open');
+  }
+
+  function refreshDaySelectOptions() {
+    const total = getDaysInMonth(calendarYear, calendarMonth);
+    const prevValue = parseInt(calDaySelect.value, 10) || 1;
+    calDaySelect.innerHTML = '';
+    for (let d = 1; d <= total; d++) {
+      calDaySelect.insertAdjacentHTML('beforeend', `<option value="${d}">${d}일</option>`);
+    }
+    calDaySelect.value = String(Math.min(prevValue, total));
+  }
+
+  function populateCalendarPickerOptions() {
+    const nowYear = new Date().getFullYear();
+    const dataYears = days.map((d) => parseInt(d.date.slice(0, 4), 10));
+    const minYear = Math.min(nowYear - 5, ...(dataYears.length ? dataYears : [nowYear]));
+    const maxYear = nowYear + 1;
+
+    calYearSelect.innerHTML = '';
+    for (let y = maxYear; y >= minYear; y--) {
+      calYearSelect.insertAdjacentHTML('beforeend', `<option value="${y}">${y}년</option>`);
+    }
+    calMonthSelect.innerHTML = '';
+    for (let m = 1; m <= 12; m++) {
+      calMonthSelect.insertAdjacentHTML('beforeend', `<option value="${m}">${m}월</option>`);
+    }
+  }
+
+  function openCalendarPicker() {
+    populateCalendarPickerOptions();
+    calYearSelect.value = String(calendarYear);
+    calMonthSelect.value = String(calendarMonth);
+    refreshDaySelectOptions();
+    const now = new Date();
+    const sameMonth = now.getFullYear() === calendarYear && now.getMonth() + 1 === calendarMonth;
+    calDaySelect.value = String(sameMonth ? now.getDate() : 1);
+    calendarPicker.classList.add('open');
+  }
+
+  calendarLabel.addEventListener('click', () => {
+    if (calendarPicker.classList.contains('open')) closeCalendarPicker();
+    else openCalendarPicker();
+  });
+
+  calYearSelect.addEventListener('change', () => {
+    calendarYear = parseInt(calYearSelect.value, 10);
+    renderCalendar();
+    refreshDaySelectOptions();
+  });
+
+  calMonthSelect.addEventListener('change', () => {
+    calendarMonth = parseInt(calMonthSelect.value, 10);
+    renderCalendar();
+    refreshDaySelectOptions();
+  });
+
+  calDaySelect.addEventListener('change', () => {
+    const d = parseInt(calDaySelect.value, 10);
+    const iso = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    closeCalendarPicker();
+    const day = days.find((x) => x.date === iso);
+    if (day) openEdit(day.id);
+    else openAddForDate(iso);
   });
 
   function openAddForDate(iso) {
@@ -1221,12 +1339,14 @@
 
   calPrevBtn.addEventListener('click', () => {
     ensureCalendarPosition();
+    closeCalendarPicker();
     calendarMonth--;
     if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
     renderCalendar();
   });
   calNextBtn.addEventListener('click', () => {
     ensureCalendarPosition();
+    closeCalendarPicker();
     calendarMonth++;
     if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
     renderCalendar();
