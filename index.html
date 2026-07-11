@@ -1219,25 +1219,35 @@
     calendarPicker.classList.remove('open');
   }
 
-  function populateCalendarPickerOptions() {
-    const nowYear = new Date().getFullYear();
+  function populateYearOptions() {
+    const now = new Date();
     const dataYears = days.map((d) => parseInt(d.date.slice(0, 4), 10));
-    const minYear = Math.min(nowYear - 5, ...(dataYears.length ? dataYears : [nowYear]));
-    const maxYear = nowYear + 1;
+    const minYear = Math.min(now.getFullYear() - 5, ...(dataYears.length ? dataYears : [now.getFullYear()]));
+    const maxYear = now.getFullYear();
 
     calYearSelect.innerHTML = '';
     for (let y = maxYear; y >= minYear; y--) {
       calYearSelect.insertAdjacentHTML('beforeend', `<option value="${y}">${y}년</option>`);
     }
+  }
+
+  // Never offer a month later than "now" within the current year.
+  function populateMonthOptions() {
+    const now = new Date();
+    const maxMonth = calendarYear === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const prevValue = parseInt(calMonthSelect.value, 10) || calendarMonth;
+
     calMonthSelect.innerHTML = '';
-    for (let m = 1; m <= 12; m++) {
+    for (let m = 1; m <= maxMonth; m++) {
       calMonthSelect.insertAdjacentHTML('beforeend', `<option value="${m}">${m}월</option>`);
     }
+    calMonthSelect.value = String(Math.min(prevValue, maxMonth));
   }
 
   function openCalendarPicker() {
-    populateCalendarPickerOptions();
+    populateYearOptions();
     calYearSelect.value = String(calendarYear);
+    populateMonthOptions();
     calMonthSelect.value = String(calendarMonth);
     calendarPicker.classList.add('open');
   }
@@ -1249,6 +1259,8 @@
 
   calYearSelect.addEventListener('change', () => {
     calendarYear = parseInt(calYearSelect.value, 10);
+    populateMonthOptions();
+    calendarMonth = parseInt(calMonthSelect.value, 10);
     renderCalendar();
     closeCalendarPicker();
   });
