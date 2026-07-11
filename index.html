@@ -1564,7 +1564,6 @@
     sheetTitle.textContent = '기록 추가';
     dateInput.value = iso;
     formExercises = [emptyExerciseRow()];
-    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
@@ -1890,16 +1889,33 @@
       listRoot.querySelectorAll('[data-delete]').forEach((btn) => {
         btn.addEventListener('click', () => deleteDay(btn.getAttribute('data-delete')));
       });
+      listRoot.querySelectorAll('[data-set-complete]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          openRepCountPopup(btn.getAttribute('data-day'), btn.getAttribute('data-set-complete'));
+        });
+      });
+      listRoot.querySelectorAll('[data-exercise-complete]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          todayTrackingIndex++;
+          render();
+        });
+      });
     }
   }
 
   function dayCardHtml(day) {
     const { label, weekday } = formatDateShort(day.date);
+    const isTodayCard = !selectionMode && day.date === todayISO();
     const exercisesHtml = day.exercises.map((ex, i) => `
       <div class="exercise">
         <p class="exercise-name"><span class="exercise-idx">${i + 1}.</span>${escapeHtml(ex.name)}</p>
         ${ex.warmup ? `<div class="exercise-line"><b>웜업</b> - ${escapeHtml(ex.warmup)}</div>` : ''}
         ${ex.main ? `<div class="exercise-line"><b>본셋</b> - ${escapeHtml(ex.main)}</div>` : ''}
+        ${isTodayCard && i === todayTrackingIndex ? `
+        <div class="tracking-actions">
+          <button type="button" class="btn btn-ghost tracking-btn" data-set-complete="${ex.id}" data-day="${day.id}">세트 완료</button>
+          <button type="button" class="btn btn-primary tracking-btn" data-exercise-complete="${ex.id}" data-day="${day.id}">운동 완료</button>
+        </div>` : ''}
       </div>
     `).join('');
 
@@ -1936,8 +1952,12 @@
   }
 
   let formExercises = [];
-  let trackingIndex = 0;
-  let pendingRepRowId = null;
+
+  // Live "오늘 카드" set tracking: which exercise (by index) currently shows
+  // the 세트 완료/운동 완료 buttons on today's already-saved day card.
+  let todayTrackingIndex = 0;
+  let pendingRepDayId = null;
+  let pendingRepExerciseId = null;
 
   // Appends a just-finished set's rep count to "weight x plannedSets x reps,reps,...".
   // Falls back to a plain comma-append for notation this simple pattern doesn't cover.
@@ -1950,8 +1970,9 @@
     return `${weight}x${sets}x${newReps}`;
   }
 
-  function openRepCountPopup(rowId) {
-    pendingRepRowId = rowId;
+  function openRepCountPopup(dayId, exerciseId) {
+    pendingRepDayId = dayId;
+    pendingRepExerciseId = exerciseId;
     repCountInput.value = '';
     openOverlay(repCountOverlay);
     setTimeout(() => repCountInput.focus(), 50);
@@ -1960,10 +1981,15 @@
   function confirmRepCount() {
     const count = parseInt(repCountInput.value, 10);
     if (!Number.isFinite(count) || count < 0) return;
-    const row = formExercises.find((r) => r.id === pendingRepRowId);
-    if (row) row.main = appendSetCount(row.main, count);
+    const day = days.find((d) => d.id === pendingRepDayId);
+    const ex = day && day.exercises.find((e) => e.id === pendingRepExerciseId);
+    if (ex) {
+      ex.main = appendSetCount(ex.main, count);
+      saveDays(days);
+      render();
+      pushToCloud();
+    }
     closeOverlay(repCountOverlay);
-    renderExerciseRows();
   }
 
   // Unique exercise names from saved history, most-used first — feeds the autocomplete.
@@ -2028,11 +2054,6 @@
         </div>
         <input type="text" class="mono" data-field="warmup" placeholder="웜업 - 예: 20x12 / 40x8" value="${escapeHtml(ex.warmup)}">
         <input type="text" class="mono" data-field="main" placeholder="본셋 - 예: 50x3x10,10,10" value="${escapeHtml(ex.main)}">
-        ${i === trackingIndex ? `
-        <div class="tracking-actions">
-          <button type="button" class="btn btn-ghost tracking-btn" data-set-complete="${ex.id}">세트 완료</button>
-          <button type="button" class="btn btn-primary tracking-btn" data-exercise-complete="${ex.id}">운동 완료</button>
-        </div>` : ''}
       </div>
     `).join('');
 
@@ -2054,15 +2075,6 @@
         renderExerciseRows();
       });
     });
-    exerciseRows.querySelectorAll('[data-set-complete]').forEach((btn) => {
-      btn.addEventListener('click', () => openRepCountPopup(btn.getAttribute('data-set-complete')));
-    });
-    exerciseRows.querySelectorAll('[data-exercise-complete]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        trackingIndex++;
-        renderExerciseRows();
-      });
-    });
   }
 
   function openAdd() {
@@ -2070,7 +2082,6 @@
     sheetTitle.textContent = '기록 추가';
     dateInput.value = todayISO();
     formExercises = [emptyExerciseRow()];
-    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
@@ -2084,7 +2095,6 @@
     formExercises = day.exercises.length
       ? day.exercises.map((e) => ({ ...e }))
       : [emptyExerciseRow()];
-    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
