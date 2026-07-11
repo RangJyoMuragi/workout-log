@@ -133,15 +133,21 @@
     flex-shrink: 0;
   }
 
+  .toolbar-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
   .search-input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 9px;
     padding: 10px 12px;
     font-size: 14.5px;
-    margin-bottom: 12px;
     font-family: inherit;
   }
   .search-input:focus {
@@ -150,6 +156,23 @@
   }
   .search-input::placeholder {
     color: var(--text-muted);
+  }
+
+  .sort-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    border-radius: 9px;
+    padding: 0 14px;
+    font-size: 13.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sort-btn:hover {
+    background: var(--surface-2);
   }
 
   .year-tabs {
@@ -654,7 +677,10 @@
     </div>
   </header>
 
-  <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
+  <div class="toolbar-row">
+    <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
+    <button class="sort-btn" id="sortToggleBtn" type="button">최신순</button>
+  </div>
 
   <div class="year-tabs" id="yearTabs"></div>
 
@@ -898,11 +924,19 @@
   const dayCountEl = document.getElementById('dayCount');
   const yearTabsEl = document.getElementById('yearTabs');
   const searchInput = document.getElementById('searchInput');
+  const sortToggleBtn = document.getElementById('sortToggleBtn');
   let activeYearFilter = 'all';
   let searchQuery = '';
+  let sortAscending = false;
 
   searchInput.addEventListener('input', () => {
     searchQuery = searchInput.value.trim();
+    render();
+  });
+
+  sortToggleBtn.addEventListener('click', () => {
+    sortAscending = !sortAscending;
+    sortToggleBtn.textContent = sortAscending ? '오래된순' : '최신순';
     render();
   });
 
@@ -1158,7 +1192,11 @@
 
   function render() {
     renderYearTabs();
-    const sorted = [...getVisibleDays()].sort((a, b) => (a.date < b.date ? 1 : -1));
+    const sorted = [...getVisibleDays()].sort((a, b) => {
+      if (a.date === b.date) return 0;
+      const newestFirst = a.date < b.date ? 1 : -1;
+      return sortAscending ? -newestFirst : newestFirst;
+    });
     dayCountEl.textContent = sorted.length ? `총 ${sorted.length}일` : '';
 
     if (sorted.length === 0) {
