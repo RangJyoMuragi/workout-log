@@ -373,6 +373,46 @@
   }
   .sync-btn:hover { background: var(--surface-2); }
 
+  .more-menu-wrap {
+    position: relative;
+  }
+
+  .more-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 180px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    z-index: 30;
+  }
+  .more-menu.open {
+    display: block;
+  }
+  .more-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--text);
+    padding: 12px 16px;
+    font-size: 14.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .more-menu-item:hover {
+    background: var(--surface-2);
+  }
+  .more-menu-item + .more-menu-item {
+    border-top: 1px solid var(--border);
+  }
+
   .import-textarea {
     width: 100%;
     min-height: 220px;
@@ -944,9 +984,14 @@
     <div class="header-actions">
       <button class="sync-btn" id="timerToggleBtn" type="button" aria-label="휴식 타이머">⏱</button>
       <button class="sync-btn" id="calendarToggleBtn" type="button" aria-label="달력 보기">📅</button>
-      <button class="sync-btn" id="importBtn" type="button" aria-label="가져오기">⬇</button>
-      <button class="sync-btn" id="selectModeBtn" type="button" aria-label="선택 삭제">🗑</button>
-      <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
+      <div class="more-menu-wrap">
+        <button class="sync-btn" id="moreMenuBtn" type="button" aria-label="더보기">⋯</button>
+        <div class="more-menu" id="moreMenu">
+          <button class="more-menu-item" id="importBtn" type="button">⬇ 메모 가져오기</button>
+          <button class="more-menu-item" id="selectModeBtn" type="button">🗑 선택 삭제</button>
+          <button class="more-menu-item" id="syncBtn" type="button">⇄ 동기화</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -1293,6 +1338,22 @@
   const sheetTitle = document.getElementById('sheetTitle');
   const dateInput = document.getElementById('dateInput');
   const exerciseRows = document.getElementById('exerciseRows');
+  const moreMenuBtn = document.getElementById('moreMenuBtn');
+  const moreMenu = document.getElementById('moreMenu');
+
+  moreMenuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    moreMenu.classList.toggle('open');
+  });
+  moreMenu.querySelectorAll('.more-menu-item').forEach((item) => {
+    item.addEventListener('click', () => moreMenu.classList.remove('open'));
+  });
+  document.addEventListener('click', (e) => {
+    if (!moreMenu.contains(e.target) && e.target !== moreMenuBtn) {
+      moreMenu.classList.remove('open');
+    }
+  });
+
   const importBtn = document.getElementById('importBtn');
   const importOverlay = document.getElementById('importOverlay');
   const importTextarea = document.getElementById('importTextarea');
