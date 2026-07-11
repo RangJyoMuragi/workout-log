@@ -725,6 +725,18 @@
     border-top: none;
   }
 
+  .tracking-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .tracking-btn {
+    flex: 1;
+    padding: 9px 4px;
+    font-size: 13px;
+    min-height: 38px;
+  }
+
   .exercise-row-head {
     display: flex;
     align-items: center;
@@ -959,6 +971,20 @@
     <div class="sheet-actions">
       <button class="btn btn-ghost" id="timerResetBtn" type="button">리셋</button>
       <button class="btn btn-primary" id="timerStartPauseBtn" type="button">시작</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="repCountOverlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-title-row">
+      <h2 class="sheet-title">세트 완료</h2>
+      <button class="sheet-close-btn" id="repCountCloseBtn" type="button" aria-label="닫기">×</button>
+    </div>
+    <label class="field-label" for="repCountInput">이번 세트 횟수</label>
+    <input type="number" id="repCountInput" class="mono" placeholder="예: 12" min="0" inputmode="numeric">
+    <div class="sheet-actions">
+      <button class="btn btn-primary" id="repCountConfirmBtn" type="button" style="width:100%;">기입</button>
     </div>
   </div>
 </div>
@@ -1275,6 +1301,19 @@
   const timerStartPauseBtn = document.getElementById('timerStartPauseBtn');
   const timerCloseBtn = document.getElementById('timerCloseBtn');
   const timerPill = document.getElementById('timerPill');
+  const repCountOverlay = document.getElementById('repCountOverlay');
+  const repCountInput = document.getElementById('repCountInput');
+  const repCountCloseBtn = document.getElementById('repCountCloseBtn');
+  const repCountConfirmBtn = document.getElementById('repCountConfirmBtn');
+
+  repCountCloseBtn.addEventListener('click', () => closeOverlay(repCountOverlay));
+  repCountOverlay.addEventListener('click', (e) => {
+    if (e.target === repCountOverlay) closeOverlay(repCountOverlay);
+  });
+  repCountConfirmBtn.addEventListener('click', () => confirmRepCount());
+  repCountInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmRepCount();
+  });
 
   let timerTotalMs = 60000;
   let timerRemainingMs = 60000;
@@ -1525,6 +1564,7 @@
     sheetTitle.textContent = '기록 추가';
     dateInput.value = iso;
     formExercises = [emptyExerciseRow()];
+    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
@@ -1896,6 +1936,35 @@
   }
 
   let formExercises = [];
+  let trackingIndex = 0;
+  let pendingRepRowId = null;
+
+  // Appends a just-finished set's rep count to "weight x plannedSets x reps,reps,...".
+  // Falls back to a plain comma-append for notation this simple pattern doesn't cover.
+  function appendSetCount(mainStr, count) {
+    const trimmed = (mainStr || '').trim();
+    const m = trimmed.match(/^([^x]+)x([^x]+)(?:x(.*))?$/);
+    if (!m) return trimmed ? `${trimmed},${count}` : String(count);
+    const [, weight, sets, reps] = m;
+    const newReps = reps && reps.trim() ? `${reps.trim()},${count}` : String(count);
+    return `${weight}x${sets}x${newReps}`;
+  }
+
+  function openRepCountPopup(rowId) {
+    pendingRepRowId = rowId;
+    repCountInput.value = '';
+    openOverlay(repCountOverlay);
+    setTimeout(() => repCountInput.focus(), 50);
+  }
+
+  function confirmRepCount() {
+    const count = parseInt(repCountInput.value, 10);
+    if (!Number.isFinite(count) || count < 0) return;
+    const row = formExercises.find((r) => r.id === pendingRepRowId);
+    if (row) row.main = appendSetCount(row.main, count);
+    closeOverlay(repCountOverlay);
+    renderExerciseRows();
+  }
 
   // Unique exercise names from saved history, most-used first — feeds the autocomplete.
   function getAllExerciseNames() {
@@ -1959,6 +2028,11 @@
         </div>
         <input type="text" class="mono" data-field="warmup" placeholder="웜업 - 예: 20x12 / 40x8" value="${escapeHtml(ex.warmup)}">
         <input type="text" class="mono" data-field="main" placeholder="본셋 - 예: 50x3x10,10,10" value="${escapeHtml(ex.main)}">
+        ${i === trackingIndex ? `
+        <div class="tracking-actions">
+          <button type="button" class="btn btn-ghost tracking-btn" data-set-complete="${ex.id}">세트 완료</button>
+          <button type="button" class="btn btn-primary tracking-btn" data-exercise-complete="${ex.id}">운동 완료</button>
+        </div>` : ''}
       </div>
     `).join('');
 
@@ -1980,6 +2054,15 @@
         renderExerciseRows();
       });
     });
+    exerciseRows.querySelectorAll('[data-set-complete]').forEach((btn) => {
+      btn.addEventListener('click', () => openRepCountPopup(btn.getAttribute('data-set-complete')));
+    });
+    exerciseRows.querySelectorAll('[data-exercise-complete]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        trackingIndex++;
+        renderExerciseRows();
+      });
+    });
   }
 
   function openAdd() {
@@ -1987,6 +2070,7 @@
     sheetTitle.textContent = '기록 추가';
     dateInput.value = todayISO();
     formExercises = [emptyExerciseRow()];
+    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
@@ -2000,6 +2084,7 @@
     formExercises = day.exercises.length
       ? day.exercises.map((e) => ({ ...e }))
       : [emptyExerciseRow()];
+    trackingIndex = 0;
     renderExerciseRows();
     openOverlay(overlay);
   }
