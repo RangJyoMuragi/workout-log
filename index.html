@@ -846,7 +846,6 @@
     <div class="calendar-picker" id="calendarPicker">
       <select class="cal-select" id="calYearSelect"></select>
       <select class="cal-select" id="calMonthSelect"></select>
-      <select class="cal-select" id="calDaySelect"></select>
     </div>
     <div class="calendar-grid" id="calendarGrid"></div>
   </div>
@@ -1167,15 +1166,10 @@
   const calendarPicker = document.getElementById('calendarPicker');
   const calYearSelect = document.getElementById('calYearSelect');
   const calMonthSelect = document.getElementById('calMonthSelect');
-  const calDaySelect = document.getElementById('calDaySelect');
 
   let viewMode = 'list';
   let calendarYear = null;
   let calendarMonth = null;
-
-  function getDaysInMonth(year, month) {
-    return new Date(year, month, 0).getDate();
-  }
 
   function refreshCurrentView() {
     if (viewMode === 'calendar') renderCalendar();
@@ -1225,16 +1219,6 @@
     calendarPicker.classList.remove('open');
   }
 
-  function refreshDaySelectOptions() {
-    const total = getDaysInMonth(calendarYear, calendarMonth);
-    const prevValue = parseInt(calDaySelect.value, 10) || 1;
-    calDaySelect.innerHTML = '';
-    for (let d = 1; d <= total; d++) {
-      calDaySelect.insertAdjacentHTML('beforeend', `<option value="${d}">${d}일</option>`);
-    }
-    calDaySelect.value = String(Math.min(prevValue, total));
-  }
-
   function populateCalendarPickerOptions() {
     const nowYear = new Date().getFullYear();
     const dataYears = days.map((d) => parseInt(d.date.slice(0, 4), 10));
@@ -1255,10 +1239,6 @@
     populateCalendarPickerOptions();
     calYearSelect.value = String(calendarYear);
     calMonthSelect.value = String(calendarMonth);
-    refreshDaySelectOptions();
-    const now = new Date();
-    const sameMonth = now.getFullYear() === calendarYear && now.getMonth() + 1 === calendarMonth;
-    calDaySelect.value = String(sameMonth ? now.getDate() : 1);
     calendarPicker.classList.add('open');
   }
 
@@ -1270,22 +1250,13 @@
   calYearSelect.addEventListener('change', () => {
     calendarYear = parseInt(calYearSelect.value, 10);
     renderCalendar();
-    refreshDaySelectOptions();
+    closeCalendarPicker();
   });
 
   calMonthSelect.addEventListener('change', () => {
     calendarMonth = parseInt(calMonthSelect.value, 10);
     renderCalendar();
-    refreshDaySelectOptions();
-  });
-
-  calDaySelect.addEventListener('change', () => {
-    const d = parseInt(calDaySelect.value, 10);
-    const iso = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     closeCalendarPicker();
-    const day = days.find((x) => x.date === iso);
-    if (day) openEdit(day.id);
-    else openAddForDate(iso);
   });
 
   function openAddForDate(iso) {
