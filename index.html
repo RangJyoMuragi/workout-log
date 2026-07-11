@@ -1906,6 +1906,11 @@
   function dayCardHtml(day) {
     const { label, weekday } = formatDateShort(day.date);
     const isTodayCard = !selectionMode && day.date === todayISO();
+    if (isTodayCard && day.id !== todayTrackingDayId) {
+      // A different day now occupies "today" (e.g. deleted and re-created) — start over.
+      todayTrackingDayId = day.id;
+      todayTrackingIndex = 0;
+    }
     const exercisesHtml = day.exercises.map((ex, i) => `
       <div class="exercise">
         <p class="exercise-name"><span class="exercise-idx">${i + 1}.</span>${escapeHtml(ex.name)}</p>
@@ -1956,6 +1961,7 @@
   // Live "오늘 카드" set tracking: which exercise (by index) currently shows
   // the 세트 완료/운동 완료 buttons on today's already-saved day card.
   let todayTrackingIndex = 0;
+  let todayTrackingDayId = null;
   let pendingRepDayId = null;
   let pendingRepExerciseId = null;
 
