@@ -237,6 +237,95 @@
     color: var(--accent-ink);
   }
 
+  .calendar-view {
+    display: none;
+  }
+  .calendar-view.open {
+    display: block;
+  }
+
+  .calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .calendar-label {
+    font-size: 16px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-nav-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .cal-nav-btn:hover {
+    background: var(--surface-2);
+  }
+
+  .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 6px;
+  }
+  .cal-weekdays span {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .cal-cell {
+    appearance: none;
+    border: 1px solid transparent;
+    background: none;
+    border-radius: 10px;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--text);
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .cal-cell.empty {
+    cursor: default;
+    pointer-events: none;
+  }
+  .cal-cell:not(.empty):hover {
+    background: var(--surface-2);
+  }
+  .cal-cell.today {
+    border-color: var(--accent);
+  }
+  .cal-cell.has-log {
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    font-weight: 700;
+  }
+  .cal-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
   .sync-btn {
     appearance: none;
     border: 1px solid var(--border);
@@ -699,13 +788,14 @@
       <span class="app-count" id="dayCount"></span>
     </div>
     <div class="header-actions">
+      <button class="sync-btn" id="calendarToggleBtn" type="button" aria-label="달력 보기">📅</button>
       <button class="sync-btn" id="importBtn" type="button" aria-label="가져오기">⬇</button>
       <button class="sync-btn" id="selectModeBtn" type="button" aria-label="선택 삭제">🗑</button>
       <button class="sync-btn" id="syncBtn" type="button" aria-label="동기화 설정">⇄</button>
     </div>
   </header>
 
-  <div class="toolbar-row">
+  <div class="toolbar-row" id="toolbarRow">
     <div class="search-wrap">
       <input type="text" id="searchInput" class="search-input" placeholder="날짜·운동 검색 (예: 10/14, 벤치)">
       <button class="search-clear-btn" id="searchClearBtn" type="button" aria-label="검색어 지우기">×</button>
@@ -716,6 +806,15 @@
   <div class="year-tabs" id="yearTabs"></div>
 
   <div id="listRoot"></div>
+
+  <div class="calendar-view" id="calendarView">
+    <div class="calendar-nav">
+      <button class="cal-nav-btn" id="calPrevBtn" type="button" aria-label="이전 달">‹</button>
+      <span class="calendar-label" id="calendarLabel"></span>
+      <button class="cal-nav-btn" id="calNextBtn" type="button" aria-label="다음 달">›</button>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </div>
 </div>
 
 <button class="fab" id="fabAdd" aria-label="기록 추가">+</button>
@@ -1023,6 +1122,115 @@
   const confirmMessage = document.getElementById('confirmMessage');
   const confirmCancelBtn = document.getElementById('confirmCancelBtn');
   const confirmOkBtn = document.getElementById('confirmOkBtn');
+  const toolbarRow = document.getElementById('toolbarRow');
+  const calendarToggleBtn = document.getElementById('calendarToggleBtn');
+  const calendarView = document.getElementById('calendarView');
+  const calendarLabel = document.getElementById('calendarLabel');
+  const calendarGrid = document.getElementById('calendarGrid');
+  const calPrevBtn = document.getElementById('calPrevBtn');
+  const calNextBtn = document.getElementById('calNextBtn');
+
+  let viewMode = 'list';
+  let calendarYear = null;
+  let calendarMonth = null;
+
+  function refreshCurrentView() {
+    if (viewMode === 'calendar') renderCalendar();
+    else render();
+  }
+
+  function ensureCalendarPosition() {
+    if (calendarYear !== null) return;
+    if (days.length > 0) {
+      const latest = [...days].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      const [y, m] = latest.date.split('-').map(Number);
+      calendarYear = y;
+      calendarMonth = m;
+    } else {
+      const now = new Date();
+      calendarYear = now.getFullYear();
+      calendarMonth = now.getMonth() + 1;
+    }
+  }
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    const isCalendar = mode === 'calendar';
+    toolbarRow.style.display = isCalendar ? 'none' : '';
+    yearTabsEl.style.display = isCalendar ? 'none' : '';
+    listRoot.style.display = isCalendar ? 'none' : '';
+    calendarView.classList.toggle('open', isCalendar);
+    calendarToggleBtn.textContent = isCalendar ? '📋' : '📅';
+    calendarToggleBtn.setAttribute('aria-label', isCalendar ? '목록 보기' : '달력 보기');
+    if (isCalendar) renderCalendar();
+    else render();
+  }
+
+  calendarToggleBtn.addEventListener('click', () => {
+    setViewMode(viewMode === 'calendar' ? 'list' : 'calendar');
+  });
+
+  function openAddForDate(iso) {
+    editingDayId = null;
+    sheetTitle.textContent = '기록 추가';
+    dateInput.value = iso;
+    formExercises = [emptyExerciseRow()];
+    renderExerciseRows();
+    openOverlay(overlay);
+  }
+
+  function renderCalendar() {
+    ensureCalendarPosition();
+    calendarLabel.textContent = `${calendarYear}년 ${calendarMonth}월`;
+
+    const byDate = new Map(days.map((d) => [d.date, d]));
+    const firstOfMonth = new Date(calendarYear, calendarMonth - 1, 1);
+    const startWeekday = firstOfMonth.getDay();
+    const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+    const todayStr = todayISO();
+
+    let cells = '';
+    for (let i = 0; i < startWeekday; i++) {
+      cells += `<div class="cal-cell empty"></div>`;
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const hasLog = byDate.has(iso);
+      const isToday = iso === todayStr;
+      cells += `
+        <button type="button" class="cal-cell${hasLog ? ' has-log' : ''}${isToday ? ' today' : ''}" data-date="${iso}">
+          <span>${d}</span>
+          ${hasLog ? '<span class="cal-dot"></span>' : ''}
+        </button>`;
+    }
+
+    calendarGrid.innerHTML = `
+      <div class="cal-weekdays">${WEEKDAYS_KO.map((w) => `<span>${w}</span>`).join('')}</div>
+      <div class="cal-days">${cells}</div>
+    `;
+
+    calendarGrid.querySelectorAll('.cal-cell[data-date]').forEach((cell) => {
+      cell.addEventListener('click', () => {
+        const iso = cell.getAttribute('data-date');
+        const day = byDate.get(iso);
+        if (day) openEdit(day.id);
+        else openAddForDate(iso);
+      });
+    });
+  }
+
+  calPrevBtn.addEventListener('click', () => {
+    ensureCalendarPosition();
+    calendarMonth--;
+    if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
+    renderCalendar();
+  });
+  calNextBtn.addEventListener('click', () => {
+    ensureCalendarPosition();
+    calendarMonth++;
+    if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
+    renderCalendar();
+  });
 
   let selectionMode = false;
   let selectedIds = new Set();
@@ -1168,7 +1376,7 @@
         applyingRemote = true;
         days = data.days;
         saveDays(days);
-        render();
+        refreshCurrentView();
         applyingRemote = false;
       }
     }, (err) => {
@@ -1322,7 +1530,7 @@
   function deleteDay(id) {
     days = days.filter((d) => d.id !== id);
     saveDays(days);
-    render();
+    refreshCurrentView();
     pushToCloud();
   }
 
@@ -1457,7 +1665,7 @@
     }
     saveDays(days);
     closeSheet();
-    render();
+    refreshCurrentView();
     pushToCloud();
   }
 
@@ -1499,7 +1707,7 @@
     for (const d of parsed) byDate.set(d.date, d);
     days = Array.from(byDate.values());
     saveDays(days);
-    render();
+    refreshCurrentView();
     pushToCloud();
     importStatus.className = 'sync-status ok';
     importStatus.textContent = `${parsed.length}일치 기록을 가져왔습니다.`;
