@@ -714,6 +714,34 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
+  .rep-count-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .rep-count-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 16px;
+    font-size: 26px;
+    font-weight: 800;
+    text-align: center;
+  }
+  .rep-count-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .rep-count-confirm-btn {
+    flex-shrink: 0;
+    padding: 0 22px;
+    font-size: 14px;
+  }
+
   .exercise-block {
     padding-top: 12px;
     margin-top: 12px;
@@ -982,9 +1010,9 @@
       <button class="sheet-close-btn" id="repCountCloseBtn" type="button" aria-label="닫기">×</button>
     </div>
     <label class="field-label" for="repCountInput">이번 세트 횟수</label>
-    <input type="number" id="repCountInput" class="mono" placeholder="예: 12" min="0" inputmode="numeric">
-    <div class="sheet-actions">
-      <button class="btn btn-primary" id="repCountConfirmBtn" type="button" style="width:100%;">기입</button>
+    <div class="rep-count-row">
+      <input type="number" id="repCountInput" class="mono rep-count-input" placeholder="예: 12" min="0" inputmode="numeric">
+      <button class="btn btn-primary rep-count-confirm-btn" id="repCountConfirmBtn" type="button">기입</button>
     </div>
   </div>
 </div>
