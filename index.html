@@ -1284,6 +1284,11 @@
     ensureCalendarPosition();
     calendarLabel.textContent = `${calendarYear}년 ${calendarMonth}월`;
 
+    const now = new Date();
+    const atCurrentMonth = calendarYear === now.getFullYear() && calendarMonth === now.getMonth() + 1;
+    calNextBtn.disabled = atCurrentMonth;
+    calNextBtn.style.visibility = atCurrentMonth ? 'hidden' : 'visible';
+
     const byDate = new Map(days.map((d) => [d.date, d]));
     const firstOfMonth = new Date(calendarYear, calendarMonth - 1, 1);
     const startWeekday = firstOfMonth.getDay();
