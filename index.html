@@ -573,6 +573,64 @@
   }
   .fab:active { transform: scale(0.96); }
 
+  .timer-pill {
+    display: none;
+    position: fixed;
+    right: 20px;
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    appearance: none;
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    z-index: 20;
+  }
+  .timer-pill.visible {
+    display: block;
+  }
+
+  .timer-display {
+    text-align: center;
+    font-size: 48px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    margin: 4px 0 18px;
+    color: var(--text);
+  }
+  .timer-display.done {
+    color: var(--accent);
+  }
+
+  .timer-presets {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .preset-btn {
+    flex: 1;
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    padding: 10px 4px;
+    border-radius: 9px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .preset-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
   .overlay {
     position: fixed;
     inset: 0;
@@ -818,6 +876,7 @@
       <span class="app-count" id="dayCount"></span>
     </div>
     <div class="header-actions">
+      <button class="sync-btn" id="timerToggleBtn" type="button" aria-label="휴식 타이머">⏱</button>
       <button class="sync-btn" id="calendarToggleBtn" type="button" aria-label="달력 보기">📅</button>
       <button class="sync-btn" id="importBtn" type="button" aria-label="가져오기">⬇</button>
       <button class="sync-btn" id="selectModeBtn" type="button" aria-label="선택 삭제">🗑</button>
@@ -852,6 +911,29 @@
 </div>
 
 <button class="fab" id="fabAdd" aria-label="기록 추가">+</button>
+
+<button class="timer-pill" id="timerPill" type="button" aria-label="타이머 열기"></button>
+
+<div class="overlay" id="timerOverlay">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2 class="sheet-title">휴식 타이머</h2>
+    <div class="timer-display" id="timerDisplay">01:00</div>
+    <div class="timer-presets" id="timerPresets">
+      <button type="button" class="preset-btn" data-secs="30">30초</button>
+      <button type="button" class="preset-btn" data-secs="60">60초</button>
+      <button type="button" class="preset-btn" data-secs="90">90초</button>
+      <button type="button" class="preset-btn" data-secs="120">120초</button>
+    </div>
+    <label class="field-label" for="timerCustomInput">직접 입력 (초)</label>
+    <input type="number" id="timerCustomInput" class="mono" placeholder="예: 45" min="1">
+
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="timerResetBtn" type="button">리셋</button>
+      <button class="btn btn-primary" id="timerStartPauseBtn" type="button">시작</button>
+    </div>
+    <button class="btn btn-ghost" id="timerCloseBtn" type="button" style="width:100%; margin-top:4px;">닫기</button>
+  </div>
+</div>
 
 <div class="selection-bar" id="selectionBar">
   <div class="selection-bar-top">
@@ -1156,6 +1238,151 @@
   const confirmMessage = document.getElementById('confirmMessage');
   const confirmCancelBtn = document.getElementById('confirmCancelBtn');
   const confirmOkBtn = document.getElementById('confirmOkBtn');
+  const timerToggleBtn = document.getElementById('timerToggleBtn');
+  const timerOverlay = document.getElementById('timerOverlay');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const timerPresets = document.getElementById('timerPresets');
+  const timerCustomInput = document.getElementById('timerCustomInput');
+  const timerResetBtn = document.getElementById('timerResetBtn');
+  const timerStartPauseBtn = document.getElementById('timerStartPauseBtn');
+  const timerCloseBtn = document.getElementById('timerCloseBtn');
+  const timerPill = document.getElementById('timerPill');
+
+  let timerTotalSeconds = 60;
+  let timerRemaining = 60;
+  let timerInterval = null;
+  let timerRunning = false;
+
+  function formatTimer(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateTimerUI() {
+    timerDisplay.textContent = formatTimer(timerRemaining);
+    timerPill.textContent = `⏱ ${formatTimer(timerRemaining)}`;
+    timerPresets.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-secs'), 10) === timerTotalSeconds);
+    });
+    const showPill = !timerOverlay.classList.contains('open') && (timerRunning || timerRemaining !== timerTotalSeconds);
+    timerPill.classList.toggle('visible', showPill);
+  }
+
+  function stopTimerInterval() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function playTimerBeep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+      osc.onended = () => ctx.close();
+    } catch (e) {
+      /* Web Audio unavailable — silently skip the beep. */
+    }
+  }
+
+  function timerFinished() {
+    stopTimerInterval();
+    timerRunning = false;
+    timerStartPauseBtn.textContent = '시작';
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+    playTimerBeep();
+    timerDisplay.classList.add('done');
+    setTimeout(() => timerDisplay.classList.remove('done'), 1500);
+    timerRemaining = timerTotalSeconds;
+    updateTimerUI();
+  }
+
+  function tickTimer() {
+    timerRemaining--;
+    updateTimerUI();
+    if (timerRemaining <= 0) timerFinished();
+  }
+
+  function startTimer() {
+    if (timerRemaining <= 0) timerRemaining = timerTotalSeconds;
+    timerRunning = true;
+    timerStartPauseBtn.textContent = '일시정지';
+    stopTimerInterval();
+    timerInterval = setInterval(tickTimer, 1000);
+    updateTimerUI();
+  }
+
+  function pauseTimer() {
+    stopTimerInterval();
+    timerRunning = false;
+    timerStartPauseBtn.textContent = '재개';
+    updateTimerUI();
+  }
+
+  function selectTimerPreset(secs) {
+    stopTimerInterval();
+    timerRunning = false;
+    timerStartPauseBtn.textContent = '시작';
+    timerTotalSeconds = secs;
+    timerRemaining = secs;
+    updateTimerUI();
+  }
+
+  timerPresets.querySelectorAll('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      selectTimerPreset(parseInt(btn.getAttribute('data-secs'), 10));
+      timerCustomInput.value = '';
+    });
+  });
+
+  timerCustomInput.addEventListener('change', () => {
+    const v = parseInt(timerCustomInput.value, 10);
+    if (v > 0) selectTimerPreset(v);
+  });
+
+  timerStartPauseBtn.addEventListener('click', () => {
+    if (timerRunning) pauseTimer();
+    else startTimer();
+  });
+
+  timerResetBtn.addEventListener('click', () => {
+    stopTimerInterval();
+    timerRunning = false;
+    timerStartPauseBtn.textContent = '시작';
+    timerRemaining = timerTotalSeconds;
+    updateTimerUI();
+  });
+
+  timerToggleBtn.addEventListener('click', () => {
+    openOverlay(timerOverlay);
+    updateTimerUI();
+  });
+  timerCloseBtn.addEventListener('click', () => {
+    closeOverlay(timerOverlay);
+    updateTimerUI();
+  });
+  timerOverlay.addEventListener('click', (e) => {
+    if (e.target === timerOverlay) {
+      closeOverlay(timerOverlay);
+      updateTimerUI();
+    }
+  });
+  timerPill.addEventListener('click', () => {
+    openOverlay(timerOverlay);
+    updateTimerUI();
+  });
+
+  updateTimerUI();
+
   const toolbarRow = document.getElementById('toolbarRow');
   const calendarToggleBtn = document.getElementById('calendarToggleBtn');
   const calendarView = document.getElementById('calendarView');
